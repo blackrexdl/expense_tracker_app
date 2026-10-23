@@ -8,6 +8,14 @@ DEFAULTS = [('Salary','income'),('Freelance','income'),('Food','expense'),('Tran
 
 def register_routes(app):
     db = app.get_db; required = app.login_required
+    def due_recurring(uid):
+        rows=db().execute('SELECT * FROM recurring_transactions WHERE user_id=? AND active=1 AND next_date<=?',(uid,date.today().isoformat())).fetchall()
+        for r in rows:
+            db().execute('INSERT INTO transactions(user_id,category_id,amount,kind,note,transaction_date) VALUES(?,?,?,?,?,?)',(uid,r['category_id'],r['amount'],r['kind'],r['note'],r['next_date']))
+            days=7 if r['frequency']=='weekly' else 30
+            next_day=(datetime.strptime(r['next_date'],'%Y-%m-%d').date()+timedelta(days=days)).isoformat()
+            db().execute('UPDATE recurring_transactions SET next_date=? WHERE id=?',(next_day,r['id']))
+        if rows: db().commit()
     @app.context_processor
     def inject_user(): return {'current_user': session.get('username'), 'today': date.today().isoformat()}
     @app.route('/register', methods=['GET','POST'])
@@ -34,7 +42,7 @@ def register_routes(app):
     @app.get('/')
     @required
     def dashboard():
-        uid=session['user_id']; params=[uid]; where=' WHERE t.user_id=?'
+        uid=session['user_id']; due_recurring(uid); params=[uid]; where=' WHERE t.user_id=?'
         kind=request.args.get('kind',''); category=request.args.get('category',''); start=request.args.get('start',''); end=request.args.get('end',''); q=request.args.get('q','').strip()
         if kind in ('income','expense'): where+=' AND t.kind=?'; params.append(kind)
         if category.isdigit(): where+=' AND t.category_id=?'; params.append(int(category))
@@ -103,6 +111,15 @@ def register_routes(app):
         if used: flash('Cannot delete a category that has transactions.','error')
         else: db().execute('DELETE FROM categories WHERE id=? AND user_id=?',(cid,session['user_id'])); db().commit(); flash('Category deleted.','success')
         return redirect(url_for('dashboard'))
+    @app.post('/categories/<int:cid>/edit')
+    @required
+    def edit_category(cid):
+        name=request.form.get('name','').strip()[:40]
+        if not name: flash('Category name is required.','error')
+        else:
+            try: db().execute('UPDATE categories SET name=? WHERE id=? AND user_id=?',(name,cid,session['user_id'])); db().commit(); flash('Category updated.','success')
+            except: flash('A category with that name already exists.','error')
+        return redirect(url_for('manage'))
     @app.post('/budgets')
     @required
     def budget():
@@ -121,10 +138,58 @@ def register_routes(app):
     def export_csv():
         rows=db().execute('SELECT t.transaction_date,t.kind,c.name,t.amount,t.note FROM transactions t JOIN categories c ON c.id=t.category_id WHERE t.user_id=? ORDER BY t.transaction_date DESC',(session['user_id'],)).fetchall(); out=io.StringIO(); writer=csv.writer(out); writer.writerow(['Date','Type','Category','Amount','Note']); writer.writerows(rows)
         return Response(out.getvalue(),mimetype='text/csv',headers={'Content-Disposition':'attachment; filename=transactions.csv'})
+    @app.get('/export/report.pdf')
+    @required
+    def export_pdf():
+        rows=db().execute('SELECT transaction_date,kind,amount,note FROM transactions WHERE user_id=? ORDER BY transaction_date DESC LIMIT 35',(session['user_id'],)).fetchall()
+        lines=['ExpenseTrack report']+[f"{r['transaction_date']}  {r['kind']}  {r['amount']:.2f}  {r['note'][:40]}" for r in rows]
+        def esc(s): return s.replace('\\','\\\\').replace('(','\\(').replace(')','\\)')
+        stream='BT /F1 14 Tf 50 780 Td '
+        for i,line in enumerate(lines): stream += ('' if i==0 else '0 -18 Td ') + f'({esc(line)}) Tj '
+        stream+='ET'; objects=['<< /Type /Catalog /Pages 2 0 R >>','<< /Type /Pages /Kids [3 0 R] /Count 1 >>','<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',f'<< /Length {len(stream)} >>\nstream\n{stream}\nendstream','<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>']
+        pdf='%PDF-1.4\n'; offsets=[0]
+        for i,obj in enumerate(objects,1): offsets.append(len(pdf)); pdf+=f'{i} 0 obj\n{obj}\nendobj\n'
+        xref=len(pdf); pdf+='xref\n0 6\n0000000000 65535 f \n'+''.join(f'{o:010d} 00000 n \n' for o in offsets[1:])+f'trailer << /Size 6 /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF'
+        return Response(pdf,mimetype='application/pdf',headers={'Content-Disposition':'attachment; filename=expense-report.pdf'})
     @app.get('/api/categories')
     @required
     def category_summary():
         rows=db().execute("SELECT c.name, COALESCE(SUM(t.amount),0) total FROM categories c LEFT JOIN transactions t ON t.category_id=c.id WHERE c.user_id=? AND c.kind='expense' GROUP BY c.id ORDER BY total DESC",(session['user_id'],)).fetchall(); return jsonify([dict(r) for r in rows])
+    @app.get('/manage')
+    @required
+    def manage():
+        uid=session['user_id']; month=date.today().strftime('%Y-%m')
+        categories=db().execute('SELECT * FROM categories WHERE user_id=? ORDER BY kind,name',(uid,)).fetchall()
+        budgets=db().execute("SELECT b.*,c.name,COALESCE(SUM(t.amount),0) spent FROM budgets b JOIN categories c ON c.id=b.category_id LEFT JOIN transactions t ON t.category_id=b.category_id AND t.kind='expense' AND substr(t.transaction_date,1,7)=b.month WHERE b.user_id=? AND b.month=? GROUP BY b.id",(uid,month)).fetchall()
+        recurring=db().execute('SELECT r.*,c.name FROM recurring_transactions r JOIN categories c ON c.id=r.category_id WHERE r.user_id=? ORDER BY r.next_date',(uid,)).fetchall()
+        return render_template('manage.html',categories=categories,budgets=budgets,recurring=recurring,month=month)
+    @app.post('/recurring')
+    @required
+    def add_recurring():
+        data,error=valid_tx(request.form,session['user_id'])
+        frequency=request.form.get('frequency')
+        if error or frequency not in ('weekly','monthly'): flash(error or 'Choose a valid frequency.','error')
+        else: db().execute('INSERT INTO recurring_transactions(user_id,category_id,amount,kind,note,frequency,next_date) VALUES(?,?,?,?,?,?,?)',(session['user_id'],data[2],data[0],data[1],data[4],frequency,data[3])); db().commit(); flash('Recurring transaction added.','success')
+        return redirect(url_for('manage'))
+    @app.post('/recurring/<int:rid>/delete')
+    @required
+    def delete_recurring(rid): db().execute('DELETE FROM recurring_transactions WHERE id=? AND user_id=?',(rid,session['user_id'])); db().commit(); flash('Recurring transaction removed.','success'); return redirect(url_for('manage'))
+    @app.route('/settings',methods=['GET','POST'])
+    @required
+    def settings():
+        uid=session['user_id']
+        if request.method=='POST':
+            action=request.form.get('action')
+            if action=='password':
+                u=db().execute('SELECT password_hash FROM users WHERE id=?',(uid,)).fetchone()
+                if not check_password_hash(u['password_hash'],request.form.get('current_password','')) or len(request.form.get('new_password',''))<8: flash('Current password is incorrect or new password is too short.','error')
+                else: db().execute('UPDATE users SET password_hash=? WHERE id=?',(generate_password_hash(request.form['new_password']),uid)); db().commit(); flash('Password changed.','success')
+            else:
+                currency=request.form.get('currency','₹')[:3]; theme=request.form.get('theme','dark'); budget=request.form.get('monthly_budget') or None
+                db().execute('INSERT INTO settings(user_id,currency,theme,monthly_budget) VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET currency=excluded.currency,theme=excluded.theme,monthly_budget=excluded.monthly_budget',(uid,currency,theme,budget)); db().commit(); flash('Settings saved.','success')
+            return redirect(url_for('settings'))
+        setting=db().execute('SELECT * FROM settings WHERE user_id=?',(uid,)).fetchone()
+        return render_template('settings.html',setting=setting)
     @app.get('/api/summary')
     @required
     def summary():

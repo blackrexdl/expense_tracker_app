@@ -26,3 +26,10 @@ Run `python -m pytest` from this folder. Tests create temporary databases and do
 - Currency display uses ₹ but all values are regular numeric amounts; change the symbol in templates if needed.
 - The Chart.js browser dependency is loaded from its public CDN. For a fully offline deployment, download Chart.js locally and update `templates/base.html`.
 - This is an academic prototype. For production add CSRF protection, rate limiting, HTTPS, password-reset flows, audit logging, and a production server.
+
+## Free deployment with Render
+
+1. Create a free GitHub repository and upload this project (do not upload `.venv`, `.env`, or `instance/`).
+2. Create an account at Render, select **New → Blueprint**, and choose the repository. Render reads `render.yaml` and creates the service.
+3. In Render environment settings set `DATABASE_PATH` to a persistent-disk location if your plan provides one. Free instances may use ephemeral storage, which means a SQLite database can be lost after a restart or redeploy.
+4. For durable free production data, connect a free hosted PostgreSQL provider and migrate from SQLite before launch. The included app is ready for free demo hosting, but SQLite is best for local/academic use.
