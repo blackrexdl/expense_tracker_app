@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>ExpenseTrack</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static',filename='style.css') }}"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </head>
+  <body>
+    {% if current_user %}
+    <aside class="sidebar">
+      <a class="logo" href="/">E<span>•</span></a
+      ><a class="side active" href="/" title="Dashboard">⌘</a
+      ><a class="side" href="/report/monthly" title="Reports">◔</a
+      ><a class="side" href="/" title="Transactions">↕</a>
+      <div class="side-bottom">
+        <span class="avatar">{{current_user[0]|upper}}</span
+        ><a class="side logout" href="/logout" title="Log out">↪</a>
+      </div>
+    </aside>
+    {% endif %}
+    <div class="app-shell">
+      <nav>
+        {% if current_user %}
+        <div>
+          <span class="eyebrow">PERSONAL FINANCE</span
+          ><strong>Good to see you, {{ current_user }}.</strong>
+        </div>
+        <a class="logout-link" href="/logout">Log out</a>{% else %}<a
+          class="brand"
+          href="/"
+          >ExpenseTrack</a
+        >{% endif %}
+      </nav>
+      <main>
+        {% with messages=get_flashed_messages(with_categories=true) %}{% for
+        category,message in messages %}
+        <div class="flash {{category}}">{{message}}</div>
+        {% endfor %}{% endwith %}{% block content %}{% endblock %}
+      </main>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,31 @@
+{% extends 'base.html' %}{% block content %}
+<section class="card">
+  <h1>Monthly report: {{month}}</h1>
+  <form method="get">
+    <input type="month" name="month" value="{{month}}" /><button>View</button
+    ><a href="/">Dashboard</a>
+  </form>
+  <table>
+    <thead>
+      <tr>
+        <th>Category</th>
+        <th>Type</th>
+        <th>Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {%for row in rows%}
+      <tr>
+        <td>{{row.name}}</td>
+        <td>{{row.kind}}</td>
+        <td class="{{row.kind}}">₹{{'%.2f'|format(row.amount)}}</td>
+      </tr>
+      {%else%}
+      <tr>
+        <td colspan="3">No activity for this month.</td>
+      </tr>
+      {%endfor%}
+    </tbody>
+  </table>
+</section>
+{%endblock%}

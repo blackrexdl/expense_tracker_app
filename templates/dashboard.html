@@ -1,0 +1,226 @@
+{% extends 'base.html' %}{% block content %}
+<div class="dash-title">
+  <div>
+    <h1>Financial overview</h1>
+    <p>Your money, beautifully organized.</p>
+  </div>
+  <a class="primary-link" href="#add">+ Add transaction</a>
+</div>
+{% for a in alerts if a.spent >= a.amount %}
+<div class="flash error">
+  Budget alert · {{a.name}} is ₹{{'%.2f'|format(a.spent-a.amount)}} over its
+  monthly limit.
+</div>
+{% endfor %}
+<section class="hero-grid">
+  <div class="insight-card">
+    <div class="card-heading">
+      <span>Spending insights</span><span class="pill">This month</span>
+    </div>
+    <div class="insight-body">
+      <div class="ring">
+        <b>₹{{'%.0f'|format(expense)}}</b><small>spent</small>
+      </div>
+      <div>
+        <h2>Know where<br />your money goes.</h2>
+        <p>Track every expense and stay in control of your budget.</p>
+      </div>
+    </div>
+  </div>
+  <div class="balance-card">
+    <span class="label">AVAILABLE BALANCE</span
+    ><strong>₹{{ '%.2f'|format(income-expense) }}</strong>
+    <div class="balance-details">
+      <span>Income <b class="income">+₹{{ '%.2f'|format(income) }}</b></span
+      ><span
+        >Expenses <b class="expense">-₹{{ '%.2f'|format(expense) }}</b></span
+      >
+    </div>
+    <i class="orb"></i>
+  </div>
+</section>
+<section class="totals">
+  <div class="metric cyan">
+    <span>⌂</span><strong>₹{{'%.0f'|format(income)}}</strong
+    ><small>Total income</small>
+  </div>
+  <div class="metric purple">
+    <span>↕</span><strong>₹{{'%.0f'|format(expense)}}</strong
+    ><small>Total spent</small>
+  </div>
+  <div class="metric lime">
+    <span>♥</span><strong>{{transactions|length}}</strong
+    ><small>Transactions</small>
+  </div>
+  <div class="metric amber">
+    <span>◉</span><strong>{{categories|length}}</strong
+    ><small>Categories</small>
+  </div>
+</section>
+<section class="content-grid">
+  <div>
+    <section class="chart-card">
+      <div class="card-heading">
+        <div>
+          <h2>Cash flow</h2>
+          <p>Income vs. expenses over time</p>
+        </div>
+        <select id="period">
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly" selected>Monthly</option>
+          <option value="yearly">Yearly</option>
+        </select>
+      </div>
+      <canvas id="chart"></canvas>
+    </section>
+    <section class="transactions-card">
+      <div class="card-heading">
+        <h2>Recent transactions</h2>
+        <a href="/report/monthly">Monthly report →</a>
+      </div>
+      <form class="filters" method="get">
+        <select name="kind">
+          <option value="">All types</option>
+          <option
+            value="income"
+            {%if
+            filters.kind=""
+            ="income"
+            %}selected{%endif%}
+          >
+            Income
+          </option>
+          <option
+            value="expense"
+            {%if
+            filters.kind=""
+            ="expense"
+            %}selected{%endif%}
+          >
+            Expense
+          </option></select
+        ><select name="category">
+          <option value="">All categories</option>
+          {%for c in categories%}
+          <option
+            value="{{c.id}}"
+            {%if
+            filters.category=""
+            ="c.id|string%}selected{%endif%}"
+          >
+            {{c.name}}
+          </option>
+          {%endfor%}</select
+        ><input type="date" name="start" value="{{filters.start}}" /><input
+          type="date"
+          name="end"
+          value="{{filters.end}}"
+        /><button>Apply</button>
+      </form>
+      <div class="tablewrap">
+        <table>
+          <tbody>
+            {%for t in transactions%}
+            <tr>
+              <td>
+                <span class="tx-icon {{t.kind}}"
+                  >{{'↓' if t.kind=='expense' else '↑'}}</span
+                >
+              </td>
+              <td>
+                <b>{{t.category}}</b
+                ><small>{{t.note or t.transaction_date}}</small>
+              </td>
+              <td>{{t.transaction_date}}</td>
+              <td class="amount {{t.kind}}">
+                {{'−' if t.kind=='expense' else
+                '+'}}₹{{'%.2f'|format(t.amount)}}
+              </td>
+              <td><a href="/transactions/{{t.id}}/edit">Edit</a></td>
+              <td>
+                <form
+                  method="post"
+                  action="/transactions/{{t.id}}/delete"
+                  onsubmit="return confirm('Delete this transaction?');"
+                >
+                  <button class="icon-button">×</button>
+                </form>
+              </td>
+            </tr>
+            {%else%}
+            <tr>
+              <td colspan="6" class="empty">
+                No transactions yet. Add your first one above.
+              </td>
+            </tr>
+            {%endfor%}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+  <aside class="right-panel">
+    <section class="dark-card" id="add">
+      <span class="label">QUICK ADD</span>
+      <h2>New transaction</h2>
+      <form method="post" action="/transactions">
+        <select name="kind" id="kind">
+          <option value="expense">Expense</option>
+          <option value="income">Income</option></select
+        ><select name="category_id" id="category" required>
+          {%for c in categories%}
+          <option value="{{c.id}}" data-kind="{{c.kind}}">{{c.name}}</option>
+          {%endfor%}</select
+        ><input
+          name="amount"
+          type="number"
+          step="0.01"
+          min="0.01"
+          placeholder="Amount"
+          required
+        /><input
+          name="transaction_date"
+          type="date"
+          value="{{today}}"
+          required
+        /><input name="note" maxlength="250" placeholder="Add a note" /><button>
+          Save transaction
+        </button>
+      </form>
+    </section>
+    <section class="side-card">
+      <h2>Monthly budget</h2>
+      <form method="post" action="/budgets">
+        <select name="category_id">
+          {%for c in categories if c.kind=='expense'%}
+          <option value="{{c.id}}">{{c.name}}</option>
+          {%endfor%}</select
+        ><input type="month" name="month" required /><input
+          name="amount"
+          type="number"
+          step="0.01"
+          min="0.01"
+          placeholder="Budget limit"
+          required
+        /><button>Set budget</button>
+      </form>
+    </section>
+    <section class="side-card">
+      <h2>Create category</h2>
+      <form method="post" action="/categories">
+        <input
+          name="name"
+          maxlength="40"
+          placeholder="Category name"
+          required
+        /><select name="kind">
+          <option value="expense">Expense</option>
+          <option value="income">Income</option></select
+        ><button>Add category</button>
+      </form>
+    </section>
+  </aside>
+</section>
+<script src="{{url_for('static',filename='app.js')}}"></script>
+{%endblock%}
