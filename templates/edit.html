@@ -3,33 +3,15 @@
   <h1>Edit transaction</h1>
   <form method="post">
     <select name="kind" id="kind">
-      <option
-        value="expense"
-        {%if
-        transaction.kind=""
-        ="expense"
-        %}selected{%endif%}
-      >
+      <option value="expense" {% if transaction.kind == 'expense' %}selected{% endif %}>
         Expense
       </option>
-      <option
-        value="income"
-        {%if
-        transaction.kind=""
-        ="income"
-        %}selected{%endif%}
-      >
+      <option value="income" {% if transaction.kind == 'income' %}selected{% endif %}>
         Income
       </option></select
     ><select name="category_id" id="category">
       {%for c in categories%}
-      <option
-        value="{{c.id}}"
-        data-kind="{{c.kind}}"
-        {%if
-        c.id=""
-        ="transaction.category_id%}selected{%endif%}"
-      >
+      <option value="{{ c.id }}" data-kind="{{ c.kind }}" {% if c.id == transaction.category_id %}selected{% endif %}>
         {{c.name}}
       </option>
       {%endfor%}</select

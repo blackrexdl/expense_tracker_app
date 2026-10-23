@@ -82,33 +82,16 @@
       <form class="filters" method="get">
         <select name="kind">
           <option value="">All types</option>
-          <option
-            value="income"
-            {%if
-            filters.kind=""
-            ="income"
-            %}selected{%endif%}
-          >
+          <option value="income" {% if filters.kind == 'income' %}selected{% endif %}>
             Income
           </option>
-          <option
-            value="expense"
-            {%if
-            filters.kind=""
-            ="expense"
-            %}selected{%endif%}
-          >
+          <option value="expense" {% if filters.kind == 'expense' %}selected{% endif %}>
             Expense
           </option></select
         ><select name="category">
           <option value="">All categories</option>
           {%for c in categories%}
-          <option
-            value="{{c.id}}"
-            {%if
-            filters.category=""
-            ="c.id|string%}selected{%endif%}"
-          >
+          <option value="{{ c.id }}" {% if filters.category == c.id|string %}selected{% endif %}>
             {{c.name}}
           </option>
           {%endfor%}</select
