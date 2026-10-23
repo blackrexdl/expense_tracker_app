@@ -27,6 +27,8 @@ def create_app(test_config=None):
     with app.app_context():
         db = get_db()
         with app.open_resource('schema.sql') as f: db.executescript(f.read().decode())
+        columns = {row['name'] for row in db.execute('PRAGMA table_info(transactions)').fetchall()}
+        if 'receipt_path' not in columns: db.execute('ALTER TABLE transactions ADD COLUMN receipt_path TEXT')
         db.commit()
     def login_required(view):
         @wraps(view)

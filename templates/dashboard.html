@@ -80,6 +80,7 @@
         <a href="/report/monthly">Monthly report →</a>
       </div>
       <form class="filters" method="get">
+        <input name="q" value="{{ filters.q }}" placeholder="Search note or amount" />
         <select name="kind">
           <option value="">All types</option>
           <option value="income" {% if filters.kind == 'income' %}selected{% endif %}>
@@ -99,7 +100,7 @@
           type="date"
           name="end"
           value="{{filters.end}}"
-        /><button>Apply</button>
+        /><button>Apply</button><a class="export-link" href="/export/transactions.csv">Export CSV</a>
       </form>
       <div class="tablewrap">
         <table>
@@ -147,7 +148,7 @@
     <section class="dark-card" id="add">
       <span class="label">QUICK ADD</span>
       <h2>New transaction</h2>
-      <form method="post" action="/transactions">
+      <form method="post" action="/transactions" enctype="multipart/form-data">
         <select name="kind" id="kind">
           <option value="expense">Expense</option>
           <option value="income">Income</option></select
@@ -167,7 +168,7 @@
           type="date"
           value="{{today}}"
           required
-        /><input name="note" maxlength="250" placeholder="Add a note" /><button>
+        /><input name="note" maxlength="250" placeholder="Add a note" /><label class="receipt-label">Receipt<input name="receipt" type="file" accept=".png,.jpg,.jpeg,.pdf" /></label><button>
           Save transaction
         </button>
       </form>

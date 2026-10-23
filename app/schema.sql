@@ -8,10 +8,12 @@ CREATE TABLE IF NOT EXISTS categories (
 );
 CREATE TABLE IF NOT EXISTS transactions (
  id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, category_id INTEGER NOT NULL, amount REAL NOT NULL CHECK(amount > 0), kind TEXT NOT NULL CHECK(kind IN ('income','expense')),
- note TEXT NOT NULL DEFAULT '', transaction_date TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ note TEXT NOT NULL DEFAULT '', receipt_path TEXT, transaction_date TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY(category_id) REFERENCES categories(id)
 );
 CREATE TABLE IF NOT EXISTS budgets (
  id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, category_id INTEGER NOT NULL, month TEXT NOT NULL, amount REAL NOT NULL CHECK(amount > 0),
  UNIQUE(user_id, category_id, month), FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY(category_id) REFERENCES categories(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS settings (user_id INTEGER PRIMARY KEY, currency TEXT NOT NULL DEFAULT '₹', theme TEXT NOT NULL DEFAULT 'dark', monthly_budget REAL, FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS recurring_transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, category_id INTEGER NOT NULL, amount REAL NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('income','expense')), note TEXT DEFAULT '', frequency TEXT NOT NULL DEFAULT 'monthly', next_date TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY(category_id) REFERENCES categories(id));

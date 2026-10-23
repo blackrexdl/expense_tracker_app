@@ -1,5 +1,7 @@
+import csv, io, os
 from datetime import date, datetime, timedelta
-from flask import render_template, request, redirect, url_for, flash, session, abort, jsonify
+from flask import render_template, request, redirect, url_for, flash, session, abort, jsonify, Response
+from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 
 DEFAULTS = [('Salary','income'),('Freelance','income'),('Food','expense'),('Transport','expense'),('Rent','expense'),('Utilities','expense'),('Health','expense'),('Other','expense')]
@@ -33,9 +35,10 @@ def register_routes(app):
     @required
     def dashboard():
         uid=session['user_id']; params=[uid]; where=' WHERE t.user_id=?'
-        kind=request.args.get('kind',''); category=request.args.get('category',''); start=request.args.get('start',''); end=request.args.get('end','')
+        kind=request.args.get('kind',''); category=request.args.get('category',''); start=request.args.get('start',''); end=request.args.get('end',''); q=request.args.get('q','').strip()
         if kind in ('income','expense'): where+=' AND t.kind=?'; params.append(kind)
         if category.isdigit(): where+=' AND t.category_id=?'; params.append(int(category))
+        if q: where += ' AND (t.note LIKE ? OR CAST(t.amount AS TEXT) LIKE ?)'; params.extend([f'%{q}%',f'%{q}%'])
         for value,op in ((start,'>='),(end,'<=')):
             if value:
                 try: datetime.strptime(value,'%Y-%m-%d'); where+=f' AND t.transaction_date {op} ?'; params.append(value)
@@ -60,7 +63,13 @@ def register_routes(app):
     def add_transaction():
         data,error=valid_tx(request.form,session['user_id'])
         if error: flash(error,'error')
-        else: db().execute('INSERT INTO transactions(user_id,amount,kind,category_id,transaction_date,note) VALUES(?,?,?,?,?,?)',(session['user_id'],data[0],data[1],data[2],data[3],data[4])); db().commit(); flash('Transaction saved.','success')
+        else:
+            receipt=request.files.get('receipt'); path=None
+            if receipt and receipt.filename:
+                name=secure_filename(receipt.filename)
+                if name.rsplit('.',1)[-1].lower() not in {'png','jpg','jpeg','pdf'}: flash('Receipt must be PNG, JPG, or PDF.','error'); return redirect(url_for('dashboard'))
+                os.makedirs(os.path.join(app.static_folder,'uploads'),exist_ok=True); path=f'uploads/{session["user_id"]}_{datetime.now().timestamp():.0f}_{name}'; receipt.save(os.path.join(app.static_folder,path))
+            db().execute('INSERT INTO transactions(user_id,amount,kind,category_id,transaction_date,note,receipt_path) VALUES(?,?,?,?,?,?,?)',(session['user_id'],data[0],data[1],data[2],data[3],data[4],path)); db().commit(); flash('Transaction saved.','success')
         return redirect(url_for('dashboard'))
     @app.post('/transactions/<int:tid>/delete')
     @required
@@ -87,6 +96,13 @@ def register_routes(app):
             try: db().execute('INSERT INTO categories(user_id,name,kind) VALUES(?,?,?)',(session['user_id'],name,kind)); db().commit(); flash('Category added.','success')
             except: flash('This category already exists.','error')
         return redirect(url_for('dashboard'))
+    @app.post('/categories/<int:cid>/delete')
+    @required
+    def delete_category(cid):
+        used=db().execute('SELECT 1 FROM transactions WHERE category_id=? AND user_id=?',(cid,session['user_id'])).fetchone()
+        if used: flash('Cannot delete a category that has transactions.','error')
+        else: db().execute('DELETE FROM categories WHERE id=? AND user_id=?',(cid,session['user_id'])); db().commit(); flash('Category deleted.','success')
+        return redirect(url_for('dashboard'))
     @app.post('/budgets')
     @required
     def budget():
@@ -97,6 +113,18 @@ def register_routes(app):
         if not row: flash('Choose an expense category.','error')
         else: db().execute('INSERT INTO budgets(user_id,category_id,month,amount) VALUES(?,?,?,?) ON CONFLICT(user_id,category_id,month) DO UPDATE SET amount=excluded.amount',(session['user_id'],cat,request.form['month'],amount)); db().commit(); flash('Budget saved.','success')
         return redirect(url_for('dashboard'))
+    @app.post('/budgets/<int:bid>/delete')
+    @required
+    def delete_budget(bid): db().execute('DELETE FROM budgets WHERE id=? AND user_id=?',(bid,session['user_id'])); db().commit(); flash('Budget removed.','success'); return redirect(url_for('dashboard'))
+    @app.get('/export/transactions.csv')
+    @required
+    def export_csv():
+        rows=db().execute('SELECT t.transaction_date,t.kind,c.name,t.amount,t.note FROM transactions t JOIN categories c ON c.id=t.category_id WHERE t.user_id=? ORDER BY t.transaction_date DESC',(session['user_id'],)).fetchall(); out=io.StringIO(); writer=csv.writer(out); writer.writerow(['Date','Type','Category','Amount','Note']); writer.writerows(rows)
+        return Response(out.getvalue(),mimetype='text/csv',headers={'Content-Disposition':'attachment; filename=transactions.csv'})
+    @app.get('/api/categories')
+    @required
+    def category_summary():
+        rows=db().execute("SELECT c.name, COALESCE(SUM(t.amount),0) total FROM categories c LEFT JOIN transactions t ON t.category_id=c.id WHERE c.user_id=? AND c.kind='expense' GROUP BY c.id ORDER BY total DESC",(session['user_id'],)).fetchall(); return jsonify([dict(r) for r in rows])
     @app.get('/api/summary')
     @required
     def summary():
