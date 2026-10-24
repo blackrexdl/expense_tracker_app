@@ -29,7 +29,14 @@ Run `python -m pytest` from this folder. Tests create temporary databases and do
 
 ## Free deployment with Render
 
-1. Create a free GitHub repository and upload this project (do not upload `.venv`, `.env`, or `instance/`).
-2. Create an account at Render, select **New → Blueprint**, and choose the repository. Render reads `render.yaml` and creates the service.
-3. In Render environment settings set `DATABASE_PATH` to a persistent-disk location if your plan provides one. Free instances may use ephemeral storage, which means a SQLite database can be lost after a restart or redeploy.
-4. For durable free production data, connect a free hosted PostgreSQL provider and migrate from SQLite before launch. The included app is ready for free demo hosting, but SQLite is best for local/academic use.
+The project now includes `render.yaml`, `Procfile`, `wsgi.py`, a `/health` endpoint, `.python-version`, and `.gitignore`.
+
+1. Create a new GitHub repository. Upload the contents of this folder, but never commit `.env`, `.venv`, `instance/`, or `static/uploads/`.
+2. In Render, choose **New → Blueprint**, connect the repository, and select the `render.yaml` file.
+3. Render creates a free Python web service, installs `requirements.txt`, and uses the production Gunicorn command automatically.
+4. Render generates `SECRET_KEY`. If creating the service manually, set a long random `SECRET_KEY`, set the build command to `pip install -r requirements.txt`, the start command to `gunicorn --workers 2 --threads 4 --bind 0.0.0.0:$PORT wsgi:app`, and health check path to `/health`.
+5. Open the supplied `onrender.com` URL after deploy completes.
+
+### Important free-tier limitation
+
+This SQLite app is suitable for a free online **demo**. Render's free web services have an ephemeral filesystem: the database and uploaded receipts are lost on a restart, deploy, or idle spin-down. Free services also spin down after 15 minutes of inactivity and can take about a minute to wake up. For permanent public use, migrate the database and uploads to external persistent storage before deploying. See [Render's free-tier documentation](https://render.com/docs/free).

@@ -8,6 +8,10 @@ DEFAULTS = [('Salary','income'),('Freelance','income'),('Food','expense'),('Tran
 
 def register_routes(app):
     db = app.get_db; required = app.login_required
+    @app.get('/health')
+    def health():
+        db().execute('SELECT 1').fetchone()
+        return {'status': 'ok'}, 200
     def due_recurring(uid):
         rows=db().execute('SELECT * FROM recurring_transactions WHERE user_id=? AND active=1 AND next_date<=?',(uid,date.today().isoformat())).fetchall()
         for r in rows:

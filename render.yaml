@@ -2,8 +2,10 @@ services:
   - type: web
     name: expense-track
     runtime: python
+    plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn run:app
+    startCommand: gunicorn --workers 2 --threads 4 --bind 0.0.0.0:$PORT wsgi:app
+    healthCheckPath: /health
     envVars:
       - key: SECRET_KEY
         generateValue: true
